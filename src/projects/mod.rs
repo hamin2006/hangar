@@ -124,6 +124,20 @@ fn walk(
     }
 }
 
+/// (name, folder) pairs without running git: enough to attribute ports to projects cheaply.
+pub fn locate(roots: &[PathBuf], max_depth: usize, ignore: &[String]) -> Vec<(String, PathBuf)> {
+    find(roots, max_depth, ignore)
+        .into_iter()
+        .map(|p| {
+            let name = p
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            (name, p)
+        })
+        .collect()
+}
+
 /// Builds full project info for one folder. Never fails: problems are recorded on the project.
 pub fn inspect(path: &Path) -> Project {
     let det = detect::detect(path);
