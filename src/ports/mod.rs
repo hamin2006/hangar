@@ -325,23 +325,34 @@ fn signal(pid: i32, sig: i32) -> Result<bool> {
     }
 }
 
-/// True while the process exists and isn't a zombie.
+/// True while the process exists and isn't a zombie (a process that exited but whose parent hasn't
+/// collected it yet: it no longer holds ports or does anything).
 #[cfg(unix)]
 pub fn alive(pid: u32) -> bool {
     match signal(pid as i32, 0) {
-        Ok(true) => {}
-        Ok(false) => return false,
-        Err(_) => return true, // exists but owned by someone else
+        Ok(true) => !is_zombie(pid),
+        Ok(false) => false,
+        Err(_) => true, // exists but owned by someone else
     }
-    let mut sys = System::new();
-    let p = Pid::from_u32(pid);
-    sys.refresh_processes_specifics(
-        ProcessesToUpdate::Some(&[p]),
-        true,
-        ProcessRefreshKind::nothing(),
-    );
-    sys.process(p)
-        .is_none_or(|proc| proc.status() != sysinfo::ProcessStatus::Zombie)
+}
+
+#[cfg(target_os = "linux")]
+fn is_zombie(pid: u32) -> bool {
+    // The state letter follows the parenthesised command name, which may itself contain ") ".
+    std::fs::read_to_string(format!("/proc/{pid}/stat"))
+        .ok()
+        .and_then(|s| s.rsplit_once(") ").map(|(_, rest)| rest.starts_with('Z')))
+        .unwrap_or(false)
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn is_zombie(pid: u32) -> bool {
+    util::run(
+        Command::new("ps").args(["-o", "stat=", "-p", &pid.to_string()]),
+        Duration::from_secs(2),
+    )
+    .map(|o| o.stdout.trim_start().starts_with('Z'))
+    .unwrap_or(false)
 }
 
 fn wait_gone(pid: u32, grace: Duration) -> bool {
