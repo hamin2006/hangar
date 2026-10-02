@@ -3,6 +3,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use hangar::config::{self, Config};
+use hangar::runner::{self, Runner};
 use hangar::{deploys, ports, projects, util};
 
 #[derive(Parser)]
@@ -44,6 +45,16 @@ enum Cmd {
         port: u16,
         #[arg(long, short)]
         force: bool,
+    },
+    /// Start a project's dev server in the background (logs go to the state folder).
+    Start { project: String },
+    /// Stop a dev server started by hangar.
+    Stop { project: String },
+    /// Print the last lines of a dev server's log.
+    Logs {
+        project: String,
+        #[arg(short = 'n', long, default_value_t = 40)]
+        lines: usize,
     },
     /// Show or create the config file.
     Config {
@@ -263,6 +274,50 @@ fn run(cmd: Option<Cmd>, cfg: Config) -> anyhow::Result<ExitCode> {
             } else {
                 ExitCode::SUCCESS
             })
+        }
+        Some(Cmd::Start { project }) => {
+            let list = projects::scan(&cfg.roots, cfg.max_depth, &cfg.ignore);
+            let p = projects::resolve(&list, &project).map_err(anyhow::Error::msg)?;
+            let Some(cmd) = &p.dev_command else {
+                anyhow::bail!("don't know how to start {} (no dev/start script)", p.name);
+            };
+            let run = Runner::default().start(&p.name, &p.path, cmd)?;
+            println!(
+                "started `{}` for {} (pid {})\nlogs: {}",
+                cmd.join(" "),
+                p.name,
+                run.pid,
+                util::tilde(&run.log)
+            );
+            Ok(ExitCode::SUCCESS)
+        }
+        Some(Cmd::Stop { project }) => {
+            let r = Runner::default();
+            let running = r.list();
+            let name = running
+                .iter()
+                .find(|x| x.project.eq_ignore_ascii_case(&project))
+                .map(|x| x.project.clone())
+                .unwrap_or(project);
+            r.stop(&name)?;
+            println!("stopped {name}");
+            Ok(ExitCode::SUCCESS)
+        }
+        Some(Cmd::Logs { project, lines }) => {
+            let r = Runner::default();
+            let log = r
+                .list()
+                .into_iter()
+                .find(|x| x.project.eq_ignore_ascii_case(&project))
+                .map(|x| x.log)
+                .unwrap_or_else(|| r.log_path(&project));
+            if !log.exists() {
+                anyhow::bail!("no log for {project} at {}", util::tilde(&log));
+            }
+            for line in runner::tail(&log, lines) {
+                println!("{line}");
+            }
+            Ok(ExitCode::SUCCESS)
         }
         Some(Cmd::Config { init }) => {
             let path = config::config_path();

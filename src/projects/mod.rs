@@ -203,6 +203,30 @@ fn disambiguate_names(projects: &mut [Project]) {
     }
 }
 
+/// Finds a project by name: exact (case-insensitive) match first, then a unique prefix.
+pub fn resolve<'a>(projects: &'a [Project], query: &str) -> Result<&'a Project, String> {
+    let q = query.to_lowercase();
+    if let Some(p) = projects.iter().find(|p| p.name.to_lowercase() == q) {
+        return Ok(p);
+    }
+    let matches: Vec<&Project> = projects
+        .iter()
+        .filter(|p| p.name.to_lowercase().starts_with(&q))
+        .collect();
+    match matches.as_slice() {
+        [one] => Ok(one),
+        [] => Err(format!("no project named `{query}`")),
+        many => Err(format!(
+            "`{query}` matches {}: {}",
+            many.len(),
+            many.iter()
+                .map(|p| p.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+    }
+}
+
 /// The project whose folder contains `path` (deepest match wins).
 pub fn owner_of<'a>(projects: &'a [Project], path: &Path) -> Option<&'a Project> {
     projects
