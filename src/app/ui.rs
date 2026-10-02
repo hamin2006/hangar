@@ -133,12 +133,15 @@ fn draw_body(f: &mut Frame, app: &mut App, area: Rect) {
         Tab::Deploys => deploys_table(f, app, table_area),
     }
     if let Some(d) = detail_area {
+        let width = d.width.saturating_sub(2) as usize;
         let lines = match app.tab {
-            Tab::Projects => app.selected_project().map(|p| project_details(app, p)),
+            Tab::Projects => app
+                .selected_project()
+                .map(|p| project_details(app, p, width)),
             Tab::Ports => app.selected_port().map(|l| port_details(app, l)),
             Tab::Deploys => app.selected_deploy().map(deploy_details),
         }
-        .unwrap_or_else(|| source_summary(app));
+        .unwrap_or_else(|| empty_details(app));
         let block = Block::bordered()
             .border_type(BorderType::Rounded)
             .border_style(Style::new().fg(FAINT))
@@ -224,10 +227,15 @@ fn changes_cell(p: &Project) -> Span<'static> {
             format!("{} conflict", g.conflicted),
             Style::new().fg(Color::Red),
         ),
-        (Some(g), _) if g.dirty() => Span::styled(
-            format!("{} changed", g.staged + g.modified + g.untracked),
-            Style::new().fg(Color::Yellow),
-        ),
+        (Some(g), _) if g.dirty() => {
+            let n = g.staged + g.modified + g.untracked;
+            let label = if n > 999 {
+                "999+ changed".to_string()
+            } else {
+                format!("{n} changed")
+            };
+            Span::styled(label, Style::new().fg(Color::Yellow))
+        }
         (Some(_), _) => Span::styled("clean", Style::new().fg(Color::Green)),
         (None, Some(_)) => Span::styled("git error", Style::new().fg(Color::Red)),
         (None, None) => Span::styled("no git", Style::new().fg(FAINT)),
@@ -334,7 +342,7 @@ fn projects_table(f: &mut Frame, app: &App, area: Rect) {
                 Constraint::Min(14),
                 Constraint::Length(6),
                 Constraint::Max(18),
-                Constraint::Length(11),
+                Constraint::Length(12),
                 Constraint::Length(8),
                 Constraint::Length(4),
                 Constraint::Length(7),
@@ -345,7 +353,30 @@ fn projects_table(f: &mut Frame, app: &App, area: Rect) {
     );
 }
 
-fn project_details(app: &App, p: &Project) -> Vec<Line<'static>> {
+/// Details pane content when nothing is selected.
+fn empty_details(app: &App) -> Vec<Line<'static>> {
+    match app.tab {
+        Tab::Deploys => source_summary(app),
+        Tab::Ports => vec![
+            Line::from(""),
+            Line::from(" Listening TCP ports and the process behind each.".fg(DIM)),
+            Line::from(" A port belongs to a project when its process".fg(DIM)),
+            Line::from(" runs inside that project's folder.".fg(DIM)),
+        ],
+        Tab::Projects => {
+            let mut l = vec![Line::from(""), Line::from(" Scanning:".fg(DIM))];
+            l.extend(
+                app.cfg
+                    .roots
+                    .iter()
+                    .map(|r| Line::from(format!("  {}", util::tilde(r)))),
+            );
+            l
+        }
+    }
+}
+
+fn project_details(app: &App, p: &Project, width: usize) -> Vec<Line<'static>> {
     let mut l: Vec<Line> = vec![
         Line::from(vec![
             Span::styled(p.name.clone(), Style::new().bold().fg(Color::White)),
@@ -420,10 +451,15 @@ fn project_details(app: &App, p: &Project) -> Vec<Line<'static>> {
                 l.push(Line::from("  working tree clean".green()));
             }
             for c in &g.commits {
+                // One line per commit: sha, subject truncated to fit the pane, age.
+                let age = util::ago(c.time);
+                let room = width
+                    .saturating_sub(c.sha.chars().count() + age.chars().count() + 4)
+                    .max(8);
                 l.push(Line::from(vec![
                     Span::styled(format!("  {} ", c.sha), Style::new().fg(Color::Yellow)),
-                    Span::raw(util::truncate(&c.subject, 60)),
-                    Span::styled(format!(" {}", util::ago(c.time)), Style::new().fg(DIM)),
+                    Span::raw(util::truncate(&c.subject, room)),
+                    Span::styled(format!(" {age}"), Style::new().fg(DIM)),
                 ]));
             }
             if g.commits.is_empty() {
@@ -1201,6 +1237,23 @@ mod tests {
         assert!(app.selected_project().is_none());
         press(&mut app, KeyCode::Char('s')); // no-op with nothing selected
         render(&mut app, 80, 24);
+    }
+
+    #[test]
+    fn long_text_is_truncated_not_wrapped() {
+        let mut app = fixture_app();
+        let mut projects = app.projects.clone();
+        if let Some(g) = projects[0].git.as_mut() {
+            g.untracked = 10_083;
+        }
+        app.on_event(Event::Projects(projects));
+        let screen = render(&mut app, 160, 40);
+        assert!(screen.contains("999+ changed"));
+        assert!(screen.contains("A very long commit subject"));
+        assert!(
+            screen.contains('…'),
+            "the subject was shortened to fit the details pane"
+        );
     }
 
     #[test]

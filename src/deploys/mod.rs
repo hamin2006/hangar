@@ -93,6 +93,11 @@ pub struct Deploy {
 }
 
 impl Deploy {
+    pub fn in_flight(&self) -> bool {
+        self.state == State::Running
+            || (self.state == State::Queued && util::now_unix() - self.created < 1800)
+    }
+
     /// Build/run time. Only running deploys count up live; queued ones have no duration yet. Values over
     /// a day are dropped because GitHub's `updated_at` moves when old runs are touched (e.g. log expiry).
     pub fn duration(&self) -> Option<i64> {
@@ -150,8 +155,10 @@ impl Report {
             .max_by_key(|d| d.created)
     }
 
+    /// Deploys genuinely in flight: running, or queued within the last 30 minutes (older "queued"
+    /// entries are usually runs waiting on a manual approval).
     pub fn active_count(&self) -> usize {
-        self.deploys.iter().filter(|d| d.state.active()).count()
+        self.deploys.iter().filter(|d| d.in_flight()).count()
     }
 
     /// Failed runs that are still the latest for their project+source (i.e. not yet fixed).
