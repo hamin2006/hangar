@@ -3,7 +3,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use hangar::config::{self, Config};
-use hangar::{ports, projects, util};
+use hangar::{deploys, ports, projects, util};
 
 #[derive(Parser)]
 #[command(
@@ -31,6 +31,11 @@ enum Cmd {
         /// Include system services and other users' processes.
         #[arg(long, short)]
         all: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Recent Vercel deployments and GitHub Actions runs for your projects.
+    Deploys {
         #[arg(long)]
         json: bool,
     },
@@ -190,6 +195,47 @@ fn run(cmd: Option<Cmd>, cfg: Config) -> anyhow::Result<ExitCode> {
                 &["PORT", "PID", "PROCESS", "PROJECT", "UP", "MEM", "COMMAND"],
                 &rows,
             );
+            Ok(ExitCode::SUCCESS)
+        }
+        Some(Cmd::Deploys { json }) => {
+            let list = projects::scan(&cfg.roots, cfg.max_depth, &cfg.ignore);
+            let report = deploys::fetch(&cfg, &list);
+            if json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+                return Ok(ExitCode::SUCCESS);
+            }
+            for (name, status) in [("vercel", &report.vercel), ("github", &report.github)] {
+                if *status != deploys::SourceStatus::Ok {
+                    eprintln!("{name}: {}", status.describe());
+                }
+            }
+            let rows: Vec<Vec<String>> = report
+                .deploys
+                .iter()
+                .map(|d| {
+                    vec![
+                        format!("{} {}", d.state.symbol(), d.state.label()),
+                        d.project.clone(),
+                        d.source.label().to_string(),
+                        util::truncate(d.detail.as_deref().unwrap_or_default(), 22),
+                        util::ago(d.created),
+                        d.duration()
+                            .map(util::duration)
+                            .unwrap_or_else(|| "-".into()),
+                        util::truncate(&d.title, 50),
+                    ]
+                })
+                .collect();
+            if rows.is_empty() {
+                println!("No deploys or CI runs found.");
+            } else {
+                print_table(
+                    &[
+                        "STATE", "PROJECT", "SOURCE", "TARGET", "AGE", "TOOK", "TITLE",
+                    ],
+                    &rows,
+                );
+            }
             Ok(ExitCode::SUCCESS)
         }
         Some(Cmd::Kill { port, force }) => {

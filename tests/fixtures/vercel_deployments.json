@@ -1,0 +1,38 @@
+{
+  "deployments": [
+    {
+      "uid": "dpl_1",
+      "name": "wayfarer",
+      "url": "wayfarer-abc.vercel.app",
+      "created": 1759300000000,
+      "ready": 1759300042000,
+      "state": "READY",
+      "target": "production",
+      "inspectorUrl": "https://vercel.com/hamin2006s-projects/wayfarer/dpl1",
+      "creator": { "uid": "u1", "username": "hamin2006" },
+      "meta": {
+        "githubCommitMessage": "Add bosses\n\nAlso tune loot",
+        "githubCommitRef": "main",
+        "githubCommitSha": "abc1234567890"
+      }
+    },
+    {
+      "uid": "dpl_2",
+      "url": "wayfarer-def.vercel.app",
+      "created": 1759300100000,
+      "readyState": "BUILDING",
+      "target": null,
+      "meta": {}
+    },
+    {
+      "uid": "dpl_3",
+      "url": "wayfarer-ghi.vercel.app",
+      "createdAt": 1759200000000,
+      "readyState": "ERROR",
+      "ready": 1759200030000,
+      "target": "production"
+    },
+    { "url": "missing-uid.vercel.app", "created": 1 }
+  ],
+  "pagination": { "count": 4, "next": null, "prev": null }
+}

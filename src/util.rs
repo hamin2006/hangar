@@ -161,8 +161,10 @@ pub fn duration(secs: i64) -> String {
         format!("{s}s")
     } else if s < 3600 {
         format!("{}m {:02}s", s / 60, s % 60)
-    } else {
+    } else if s < 86_400 {
         format!("{}h {:02}m", s / 3600, (s % 3600) / 60)
+    } else {
+        format!("{}d {}h", s / 86_400, (s % 86_400) / 3600)
     }
 }
 
@@ -332,6 +334,7 @@ mod tests {
         assert_eq!(duration(9), "9s");
         assert_eq!(duration(185), "3m 05s");
         assert_eq!(duration(8040), "2h 14m");
+        assert_eq!(duration(90_000), "1d 1h");
         assert_eq!(bytes(900), "900B");
         assert_eq!(bytes(2048), "2K");
         assert_eq!(bytes(350 * 1024 * 1024), "350M");
