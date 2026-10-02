@@ -121,8 +121,11 @@ fn draw_body(f: &mut Frame, app: &mut App, area: Rect) {
         let [a, b] = Layout::horizontal([Constraint::Percentage(62), Constraint::Percentage(38)])
             .areas(area);
         (a, Some(b))
-    } else if area.height >= 22 {
-        let [a, b] = Layout::vertical([Constraint::Min(6), Constraint::Length(11)]).areas(area);
+    } else if area.height >= 18 {
+        // Narrow terminals stack the details under the table, giving the table most of the room.
+        let details = (area.height * 2 / 5).clamp(7, 12);
+        let [a, b] =
+            Layout::vertical([Constraint::Min(6), Constraint::Length(details)]).areas(area);
         (a, Some(b))
     } else {
         (area, None)
