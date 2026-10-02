@@ -114,8 +114,14 @@ fn print_table(headers: &[&str], rows: &[Vec<String>]) {
 fn run(cmd: Option<Cmd>, cfg: Config) -> anyhow::Result<ExitCode> {
     match cmd {
         None => {
-            eprintln!("the dashboard isn't built yet; try `hangar projects` or `hangar ports`");
-            Ok(ExitCode::FAILURE)
+            use std::io::IsTerminal;
+            if !std::io::stdout().is_terminal() || !std::io::stdin().is_terminal() {
+                anyhow::bail!(
+                    "the dashboard needs an interactive terminal; try `hangar projects`, `hangar ports` or `hangar deploys`"
+                );
+            }
+            hangar::app::run(cfg)?;
+            Ok(ExitCode::SUCCESS)
         }
         Some(Cmd::Projects { json }) => {
             let list = projects::scan(&cfg.roots, cfg.max_depth, &cfg.ignore);
